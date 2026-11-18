@@ -150,17 +150,29 @@
 
   var ACCEPTED = { OK: 1, EXTRA: 1 };
 
+  /** Nama jasa kirim singkat dari "Opsi Pengiriman" Shopee, atau dari bentuk resinya. */
+  function kurirOf(opsi, resi) {
+    var s = String(opsi || '').toUpperCase();
+    var map = [[/SPX|SHOPEE ?XPRESS/, 'SPX'], [/JNE/, 'JNE'], [/J&T|JNT|J & T/, 'J&T'], [/SICEPAT/, 'SiCepat'],
+               [/ANTERAJA/, 'AnterAja'], [/NINJA/, 'Ninja'], [/POS ?INDONESIA|POS/, 'POS'], [/ID ?EXPRESS|IDX/, 'ID Express'],
+               [/LION/, 'Lion'], [/GOSEND|GO-SEND|GRAB/, 'Instan']];
+    for (var i = 0; i < map.length; i++) if (map[i][0].test(s)) return map[i][1];
+    if (/^SPXID/.test(String(resi || ''))) return 'SPX';
+    return '';
+  }
+
   function onResult(item, res) {
+    var kurir = item.type === 'scan' ? kurirOf(res.kurir, res.resi || item.resi) : '';
     if (item.type === 'scan') {
       if (!ACCEPTED[res.code]) removeUndo(item.id);
-      updateHist(item.id, { state: res.code, t: res.t, h: res.h });
+      updateHist(item.id, { state: res.code, t: res.t, h: res.h, kurir: kurir });
     } else if (res.code === 'UNDONE') {
       updateHist(item.target, { state: 'UNDONE', t: 'warn', h: 'Dibatalkan' });
     }
     var detail = [res.m, [res.no, res.kurir].filter(Boolean).join(' · '), res.replay ? '(hasil kiriman ulang)' : '']
       .filter(Boolean).join(' ');
     if (item.id === lastActionId) {
-      showCard(res.t, res.h, detail, res.resi || item.resi || '');
+      showCard(res.t, res.h, detail, res.resi || item.resi || '', item.type === 'scan' ? (kurir || '?') : '');
       feedback(res.t);
     } else if (res.t !== 'ok') {
       // Hasil scan lama dari antrean yang ternyata bermasalah: jangan diam saja.
@@ -351,10 +363,14 @@
   /* ---------------------------------------------------------------- */
   /* Tampilan layar scan                                                */
   /* ---------------------------------------------------------------- */
-  function showCard(t, h, m, resi) {
+  function showCard(t, h, m, resi, kurir) {
     var c = $('card');
     c.className = 'card card-' + t;
-    c.innerHTML = '<div class="card-h">' + esc(h) + '</div>' +
+    var badge = kurir
+      ? '<div class="kurir kurir-' + esc(kurir.replace(/[^A-Za-z]/g, '').toLowerCase() || 'x') + '">' +
+        esc(kurir === '?' ? 'Kurir ?' : kurir) + '</div>'
+      : '';
+    c.innerHTML = '<div class="card-top"><div class="card-h">' + esc(h) + '</div>' + badge + '</div>' +
       (resi ? '<div class="card-resi">' + esc(resi) + '</div>' : '') +
       (m ? '<div class="card-m">' + esc(m) + '</div>' : '');
   }
@@ -417,7 +433,7 @@
       var cls = x.state === 'PENDING' ? 'pend' : x.state === 'UNDONE' ? 'undone' : (x.t || 'ok');
       return '<li><span class="h-time">' + hhmm(x.at) + '</span>' +
         '<span class="h-mode h-' + x.mode + '">' + (x.mode === 'in' ? 'MASUK' : 'KELUAR') + '</span>' +
-        '<span class="h-resi">' + esc(x.resi) + '</span>' +
+        '<span class="h-resi">' + (x.kurir ? '<b class="h-kurir">' + esc(x.kurir) + '</b> ' : '') + esc(x.resi) + '</span>' +
         '<span class="h-st h-' + cls + '">' + esc(STATE_LABEL[x.state] || x.state) + '</span></li>';
     }).join('');
   }
@@ -479,6 +495,9 @@
     return null;
   }
 
+  // Tidak perlu discan: diambil kurir langsung / bukan pengiriman reguler.
+  var INSTAN_RE = /instan|same\s*-?\s*day|sameday|next\s*-?\s*day|ambil\s*di\s*tempat/i;
+
   /** rows: hasil sheet_to_json. Dedupe per resi, lewati resi kosong & dibatalkan. */
   function parseExport(rows) {
     var cols = rows.length ? Object.keys(rows[0]) : [];
@@ -490,18 +509,22 @@
       tenggat: findCol(cols, 'Pesanan Harus Dikirimkan Sebelum (Menghindari keterlambatan)', /harus\s*dikirim/i)
     };
     if (!c.resi) return { error: 'Kolom "No. Resi" tidak ketemu. Pastikan ini file ekspor "Perlu Dikirim" dari Shopee. Kolom yang ada: ' + cols.slice(0, 8).join(', ') };
-    var seen = {}, items = [], kosong = {}, batal = {}, dupRows = 0;
+    var seen = {}, items = [], kosong = {}, batal = {}, instan = {}, dupRows = 0;
     rows.forEach(function (r, i) {
       var no = c.no ? String(r[c.no] || '').trim() : '';
       var key = no || 'baris' + i;
+      var kurir = c.kurir ? String(r[c.kurir] || '').trim() : '';
       if (c.batal && String(r[c.batal] || '').trim()) { batal[key] = 1; return; }
+      // Instant & Same Day diambil kurir langsung di tempat: tidak ikut dicek.
+      if (INSTAN_RE.test(kurir)) { instan[key] = 1; return; }
       var resi = normResi(r[c.resi]);
       if (resi.length < MIN_RESI) { kosong[key] = 1; return; }
       if (seen[resi]) { dupRows++; return; }
       seen[resi] = 1;
-      items.push({ resi: resi, no: no, kurir: c.kurir ? String(r[c.kurir] || '').trim() : '', deadline: c.tenggat ? parseDeadline(r[c.tenggat]) : null, src: 'ekspor' });
+      items.push({ resi: resi, no: no, kurir: kurir, deadline: c.tenggat ? parseDeadline(r[c.tenggat]) : null, src: 'ekspor' });
     });
-    return { items: items, rows: rows.length, dupRows: dupRows, skipKosong: Object.keys(kosong).length, skipBatal: Object.keys(batal).length };
+    return { items: items, rows: rows.length, dupRows: dupRows, skipKosong: Object.keys(kosong).length,
+             skipBatal: Object.keys(batal).length, skipInstan: Object.keys(instan).length };
   }
 
   function parsePaste(text) {
@@ -568,6 +591,7 @@
     var a = [];
     if (p.skipKosong) a.push(p.skipKosong + ' pesanan resinya masih kosong (atur pengiriman dulu di Shopee)');
     if (p.skipBatal) a.push(p.skipBatal + ' pesanan dibatalkan/dikembalikan');
+    if (p.skipInstan) a.push(p.skipInstan + ' pesanan Instant/Same Day/Next Day/Ambil di Tempat (tidak perlu discan)');
     if (p.invalid) a.push(p.invalid + ' baris bukan resi');
     return a.length ? 'Dilewati: ' + a.join('; ') + '.' : '';
   }
@@ -580,6 +604,7 @@
       r.sudahAda ? '<li>' + r.sudahAda + ' sudah ada di Daftar — dilewati (aman, tidak dobel)</li>' : '',
       p.skipKosong ? '<li>' + p.skipKosong + ' pesanan dilewati: resi masih kosong. Atur pengiriman di Shopee, lalu ekspor lagi.</li>' : '',
       p.skipBatal ? '<li>' + p.skipBatal + ' pesanan dilewati: dibatalkan/dikembalikan</li>' : '',
+      p.skipInstan ? '<li>' + p.skipInstan + ' pesanan dilewati: Instant/Same Day/Next Day/Ambil di Tempat (tidak perlu discan)</li>' : '',
       p.invalid ? '<li>' + p.invalid + ' baris dilewati: bukan resi</li>' : '',
       p.dupRows ? '<li>' + p.dupRows + ' baris produk tambahan digabung (1 resi = 1 paket)</li>' : '',
       '</ul>'
