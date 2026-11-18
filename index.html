@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191919" media="(prefers-color-scheme: dark)">
+<title>Scan Resi Baby Sona</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-view="scan" data-mode="in">
+
+<header class="top">
+  <div class="brand">Baby Sona</div>
+  <nav class="tabs" role="tablist" aria-label="Halaman">
+    <button type="button" role="tab" data-view-btn="scan">Scan</button>
+    <button type="button" role="tab" data-view-btn="impor">Impor</button>
+  </nav>
+  <button type="button" id="gear" class="icon-btn" aria-label="Pengaturan" title="Pengaturan">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.7 7.7 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z"/></svg>
+  </button>
+</header>
+
+<div id="banner" class="banner" hidden role="alert">
+  <span id="bannerText"></span>
+  <button type="button" id="bannerBtn" class="btn small">Buka Pengaturan</button>
+</div>
+
+<main>
+  <!-- ============ SCAN (HP) ============ -->
+  <section id="v-scan" class="view">
+    <div class="counter" aria-label="Ringkasan">
+      <div><b id="cMasuk">–</b><span>masuk</span></div>
+      <div><b id="cKeluar">–</b><span>keluar</span></div>
+      <div><b id="cTotal">–</b><span>dari daftar</span></div>
+    </div>
+
+    <div id="queuePill" class="queue" hidden>
+      <div><b id="queueText"></b><small id="queueWhy"></small></div>
+      <button type="button" id="queueSend" class="btn small">Kirim sekarang</button>
+    </div>
+
+    <div id="modeLabel" class="mode-label"></div>
+
+    <div id="card" class="card card-idle" aria-live="assertive">
+      <div class="card-h">Siap scan</div>
+      <div class="card-m">Pilih mode di bawah, lalu tekan tombol Scan.</div>
+    </div>
+    <div id="raw" class="raw"></div>
+
+    <div id="reader" class="reader" hidden></div>
+    <div id="photoReader" hidden></div>
+
+    <form id="manualForm" class="manual" autocomplete="off">
+      <input type="text" id="manual" inputmode="text" autocapitalize="characters" spellcheck="false"
+             placeholder="Ketik resi / scanner USB" aria-label="Resi manual">
+      <button type="submit" class="btn">OK</button>
+    </form>
+
+    <div class="row2">
+      <label class="btn ghost">Foto resi<input type="file" id="photo" accept="image/*" capture="environment" hidden></label>
+      <button type="button" id="undo" class="btn ghost">Batalkan scan terakhir</button>
+    </div>
+
+    <h3 class="sub">Terakhir di perangkat ini</h3>
+    <ul id="hist" class="hist"></ul>
+  </section>
+
+  <!-- ============ IMPOR (LAPTOP) ============ -->
+  <section id="v-impor" class="view" hidden>
+    <div class="imp">
+      <div class="col">
+        <h2>Impor daftar dari Shopee</h2>
+        <p class="mu">Seller Center → Pesanan → Perlu Dikirim → Ekspor. Atur pengiriman dulu supaya No. Resi sudah muncul.</p>
+        <label id="drop" class="drop" for="file">
+          <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+          <b>Tarik file ekspor ke sini</b>
+          <span>atau klik untuk pilih file .xlsx / .csv</span>
+        </label>
+
+        <details class="paste">
+          <summary>Tambah resi manual (JNE, dll.)</summary>
+          <textarea id="paste" rows="4" placeholder="Satu resi per baris"></textarea>
+          <button type="button" id="pasteBtn" class="btn ghost">Periksa resi tempelan</button>
+        </details>
+
+        <div id="impMsg" class="msg" aria-live="polite"></div>
+
+        <div id="preview" class="preview" hidden>
+          <div id="pvSummary"></div>
+          <ul id="pvItems" class="items"></ul>
+          <div class="row2">
+            <button type="button" id="pvSave" class="btn primary">Simpan</button>
+            <button type="button" id="pvCancel" class="btn ghost">Batal</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <a id="openSheet" class="btn primary wide" target="_blank" rel="noopener">Buka Google Sheet</a>
+        <div class="h2row">
+          <h2>Belum scan masuk <span id="pendCount" class="count">–</span></h2>
+          <button type="button" id="pendRefresh" class="btn small ghost">Muat ulang</button>
+        </div>
+        <p class="mu">Urut tenggat terdekat. Merah = tenggat kurang dari 3 jam.</p>
+        <ul id="pending" class="items"></ul>
+
+        <h2 class="mt">Sesi</h2>
+        <p class="mu">Selesai hari ini? Reset memindahkan semua data ke tab Arsip (tersembunyi) lalu mengosongkan Daftar & Scan.</p>
+        <button type="button" id="resetBtn" class="btn danger">Reset sesi</button>
+        <div id="resetMsg" class="msg"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Tombol bawah, mudah dijangkau jempol -->
+<div id="dock" class="dock">
+  <div class="seg" role="group" aria-label="Mode scan">
+    <button type="button" id="segIn" class="seg-in" aria-pressed="true">MASUK<small>selesai packing</small></button>
+    <button type="button" id="segOut" class="seg-out" aria-pressed="false">KELUAR<small>serahkan ke kurir</small></button>
+  </div>
+  <button type="button" id="scanBtn" class="scan-btn">
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 9v6M10 9v6M13 9v6M17 9v6"/></svg>
+    <span id="scanLabel">Scan MASUK</span>
+  </button>
+</div>
+
+<div id="toast" class="toast" hidden role="status"></div>
+
+<dialog id="settings" class="sheet">
+  <form id="setForm" method="dialog">
+    <h2>Pengaturan</h2>
+    <p class="mu">Disimpan hanya di perangkat ini. Isi di HP dan di laptop.</p>
+    <label class="fld">URL Web App Apps Script
+      <input type="url" id="setUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="fld">Token rahasia
+      <span class="inrow">
+        <input type="password" id="setToken" autocomplete="off" spellcheck="false">
+        <button type="button" id="setTokenShow" class="btn small ghost">Lihat</button>
+      </span>
+    </label>
+    <label class="fld">Nama perangkat
+      <input type="text" id="setDevice" maxlength="40" placeholder="mis. HP Packing">
+    </label>
+    <div id="setMsg" class="msg" aria-live="polite"></div>
+    <div class="row2">
+      <button type="submit" id="setSave" class="btn primary">Simpan & tes koneksi</button>
+      <button type="button" id="setClose" class="btn ghost">Tutup</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
