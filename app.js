@@ -309,8 +309,22 @@
     return 'Pakai Foto resi atau ketik manual.';
   }
 
+  // Kamera kadang salah baca 1 frame (mis. SPXCD0645955402-B untuk SPXID06459554023B).
+  // Kode baru diterima kalau terbaca SAMA 2x berturut-turut dalam 1,5 detik.
+  var camCand = '', camCandAt = 0;
+  function camDecoded(txt) {
+    var now = Date.now();
+    if (txt === camCand && now - camCandAt < 1500) {
+      camCand = ''; camCandAt = 0;
+      submitCode(txt, 'kamera');
+    } else {
+      camCand = txt; camCandAt = now;
+    }
+  }
+
   function startCam() {
     if (camOn || camBusy) return;
+    camCand = '';
     if (!window.Html5Qrcode) {
       showCard('warn', 'Pustaka kamera belum termuat', 'Cek internet lalu muat ulang halaman. Sementara pakai ketik manual.', '');
       feedback('warn'); return;
@@ -329,7 +343,7 @@
         var bw = Math.max(120, Math.floor(w * 0.92));
         return { width: bw, height: Math.max(80, Math.floor(Math.min(h * 0.65, bw * 0.55))) };
       }
-    }, function (txt) { submitCode(txt, 'kamera'); }, function () { /* belum ketemu */ })
+    }, camDecoded, function () { /* belum ketemu */ })
       .then(function () { camOn = true; camBusy = false; renderScanBtn(); })
       .catch(function (e) {
         camOn = false; camBusy = false; $('reader').hidden = true; renderScanBtn();
