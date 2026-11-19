@@ -153,7 +153,7 @@
   /** Nama jasa kirim singkat dari "Opsi Pengiriman" Shopee, atau dari bentuk resinya. */
   function kurirOf(opsi, resi) {
     var s = String(opsi || '').toUpperCase();
-    var map = [[/SPX|SHOPEE ?XPRESS/, 'SPX'], [/JNE/, 'JNE'], [/J&T|JNT|J & T/, 'J&T'], [/SICEPAT/, 'SiCepat'],
+    var map = [[/SPX|SHOPEE ?XPRESS/, 'SPX'], [/JNE/, 'JNE'], [/(J&T|JNT|J & T) ?CARGO/, 'J&T Cargo'], [/J&T|JNT|J & T/, 'J&T'], [/SICEPAT/, 'SiCepat'],
                [/ANTERAJA/, 'AnterAja'], [/NINJA/, 'Ninja'], [/POS ?INDONESIA|POS/, 'POS'], [/ID ?EXPRESS|IDX/, 'ID Express'],
                [/LION/, 'Lion'], [/GOSEND|GO-SEND|GRAB/, 'Instan']];
     for (var i = 0; i < map.length; i++) if (map[i][0].test(s)) return map[i][1];
@@ -335,10 +335,11 @@
     }
     $('reader').hidden = false;
     camBusy = true; renderScanBtn();
+    window.scrollTo(0, 0);
     qr = qr || new Html5Qrcode('reader', qrConfig());
     qr.start({ facingMode: 'environment' }, {
       fps: 12,
-      aspectRatio: 1.333,
+      aspectRatio: 1.777, // lebar & pendek: cocok untuk barcode resi, hemat tempat
       qrbox: function (w, h) {
         var bw = Math.max(120, Math.floor(w * 0.92));
         return { width: bw, height: Math.max(80, Math.floor(Math.min(h * 0.65, bw * 0.55))) };
@@ -419,6 +420,21 @@
     $('cMasuk').textContent = s.masuk != null ? s.masuk : '–';
     $('cKeluar').textContent = s.keluar != null ? s.keluar : '–';
     $('cTotal').textContent = s.total != null ? s.total : '–';
+    // Jumlah per jasa kirim (dari Opsi Pengiriman di Daftar), untuk memisahkan paket.
+    var agg = {}, order = [];
+    Object.keys(s.per || {}).forEach(function (opsi) {
+      var k = kurirOf(opsi, '') || 'Lainnya', p = s.per[opsi];
+      if (!agg[k]) { agg[k] = [0, 0, 0]; order.push(k); }
+      for (var i = 0; i < 3; i++) agg[k][i] += p[i] || 0;
+    });
+    order.sort(function (a, b) { return agg[b][0] - agg[a][0]; });
+    var box = $('perKurir');
+    box.hidden = !order.length;
+    box.innerHTML = order.map(function (k) {
+      var a = agg[k];
+      return '<div><b>' + esc(k) + ' <span>' + a[0] + '</span></b>' +
+        '<small>' + a[1] + ' masuk · ' + a[2] + ' keluar</small></div>';
+    }).join('');
   }
 
   function renderQueue() {
@@ -457,6 +473,17 @@
     var word = mode === 'in' ? 'MASUK' : 'KELUAR';
     $('scanLabel').textContent = camBusy ? 'Membuka kamera…' : camOn ? 'Tutup kamera' : 'Scan ' + word;
     b.classList.toggle('on', camOn);
+    document.body.classList.toggle('cam-on', camOn || camBusy);
+  }
+
+  function refreshNow() {
+    var b = $('scanRefresh');
+    b.disabled = true;
+    sendNow();
+    api({ action: 'stats' })
+      .then(function () { toast('ok', 'Angka sudah diperbarui.'); })
+      .catch(function (e) { toast('warn', e.message); })
+      .then(function () { b.disabled = false; });
   }
 
   /* ---------------------------------------------------------------- */
@@ -846,6 +873,7 @@
     $('pvSave').addEventListener('click', saveStaged);
     $('pvCancel').addEventListener('click', function () { staged = null; $('preview').hidden = true; impMsg(''); });
     $('pendRefresh').addEventListener('click', loadPending);
+    $('scanRefresh').addEventListener('click', refreshNow);
     $('resetBtn').addEventListener('click', resetSession);
     $('openSheet').addEventListener('click', function (e) {
       if (!cfg.sheetUrl) { e.preventDefault(); impMsg('Simpan Pengaturan (ikon gigi) dulu supaya link Sheet diketahui.', 'err'); }

@@ -41,22 +41,29 @@
       <div><b id="cKeluar">–</b><span>keluar</span></div>
       <div><b id="cTotal">–</b><span>dari daftar</span></div>
     </div>
+    <div id="perKurir" class="per-kurir" hidden aria-label="Jumlah per jasa kirim"></div>
 
     <div id="queuePill" class="queue" hidden>
       <div><b id="queueText"></b><small id="queueWhy"></small></div>
       <button type="button" id="queueSend" class="btn small">Kirim sekarang</button>
     </div>
 
-    <div id="modeLabel" class="mode-label"></div>
+    <div class="mode-row">
+      <div id="modeLabel" class="mode-label"></div>
+      <button type="button" id="scanRefresh" class="icon-btn refresh" aria-label="Muat ulang angka" title="Muat ulang angka">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+      </button>
+    </div>
+
+    <!-- Kamera di atas kartu hasil: keduanya kelihatan tanpa scroll -->
+    <div id="reader" class="reader" hidden></div>
+    <div id="photoReader" hidden></div>
 
     <div id="card" class="card card-idle" aria-live="assertive">
       <div class="card-h">Siap scan</div>
       <div class="card-m">Pilih mode di bawah, lalu tekan tombol Scan.</div>
     </div>
     <div id="raw" class="raw"></div>
-
-    <div id="reader" class="reader" hidden></div>
-    <div id="photoReader" hidden></div>
 
     <form id="manualForm" class="manual" autocomplete="off">
       <input type="text" id="manual" inputmode="text" autocapitalize="characters" spellcheck="false"
