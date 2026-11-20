@@ -549,8 +549,19 @@
       no: findCol(cols, 'No. Pesanan', /^no\.?\s*pesanan|^nomor\s*pesanan/i),
       kurir: findCol(cols, 'Opsi Pengiriman', /opsi\s*pengiriman|kurir|ekspedisi/i),
       batal: findCol(cols, 'Status Pembatalan/ Pengembalian', /pembatalan|pengembalian/i),
-      tenggat: findCol(cols, 'Pesanan Harus Dikirimkan Sebelum (Menghindari keterlambatan)', /harus\s*dikirim/i)
+      tenggat: findCol(cols, 'Pesanan Harus Dikirimkan Sebelum (Menghindari keterlambatan)', /harus\s*dikirim/i),
+      penerima: findCol(cols, 'Nama Penerima', /nama\s*penerima/i),
+      user: findCol(cols, 'Username (Pembeli)', /username/i),
+      produk: findCol(cols, 'Nama Produk', /^nama\s*produk/i),
+      variasi: findCol(cols, 'Nama Variasi', /^nama\s*variasi/i),
+      jumlah: findCol(cols, 'Jumlah', /^jumlah$/i)
     };
+    function val(r, k) { return c[k] ? String(r[c[k]] == null ? '' : r[c[k]]).trim() : ''; }
+    function produkOf(r) {
+      var p = val(r, 'produk'), v = val(r, 'variasi'), q = val(r, 'jumlah');
+      if (!p) return '';
+      return p + (v ? ' (' + v + ')' : '') + (q && q !== '1' ? ' ×' + q : '');
+    }
     if (!c.resi) return { error: 'Kolom "No. Resi" tidak ketemu. Pastikan ini file ekspor "Perlu Dikirim" dari Shopee. Kolom yang ada: ' + cols.slice(0, 8).join(', ') };
     var seen = {}, items = [], kosong = {}, batal = {}, instan = {}, dupRows = 0;
     rows.forEach(function (r, i) {
@@ -562,9 +573,17 @@
       if (INSTAN_RE.test(kurir)) { instan[key] = 1; return; }
       var resi = normResi(r[c.resi]);
       if (resi.length < MIN_RESI) { kosong[key] = 1; return; }
-      if (seen[resi]) { dupRows++; return; }
-      seen[resi] = 1;
-      items.push({ resi: resi, no: no, kurir: kurir, deadline: c.tenggat ? parseDeadline(r[c.tenggat]) : null, src: 'ekspor' });
+      var prod = produkOf(r);
+      if (seen[resi]) { // baris produk tambahan dari pesanan yang sama
+        dupRows++;
+        if (prod && seen[resi].produk.indexOf(prod) < 0) seen[resi].produk += (seen[resi].produk ? ' | ' : '') + prod;
+        return;
+      }
+      var pen = val(r, 'penerima'), user = val(r, 'user');
+      var it = { resi: resi, no: no, kurir: kurir, deadline: c.tenggat ? parseDeadline(r[c.tenggat]) : null, src: 'ekspor',
+                 penerima: pen + (user && user !== pen ? ' (' + user + ')' : ''), produk: prod };
+      seen[resi] = it;
+      items.push(it);
     });
     return { items: items, rows: rows.length, dupRows: dupRows, skipKosong: Object.keys(kosong).length,
              skipBatal: Object.keys(batal).length, skipInstan: Object.keys(instan).length };
@@ -624,7 +643,7 @@
     return api({ action: 'importPreview', rows: p.items }, 30000).then(function (r) {
       var isNew = {};
       r.baru.forEach(function (x) { isNew[x] = 1; });
-      staged = { items: p.items.filter(function (x) { return isNew[x.resi]; }), label: label };
+      staged = { items: p.items.filter(function (x) { return isNew[x.resi]; }), all: p.items, lengkapi: r.lengkapi || 0, label: label };
       renderPreview(p, r);
       impMsg('');
     }, function (e) { impMsg('Belum bisa dicek ke Sheet: ' + e.message, 'err'); });
@@ -645,6 +664,7 @@
       '<div class="pv-big"><b>' + n + '</b> resi baru akan ditambahkan</div>',
       '<ul class="pv-list">',
       r.sudahAda ? '<li>' + r.sudahAda + ' sudah ada di Daftar — dilewati (aman, tidak dobel)</li>' : '',
+      staged.lengkapi ? '<li>' + staged.lengkapi + ' resi lama akan dilengkapi nama penerima & produknya</li>' : '',
       p.skipKosong ? '<li>' + p.skipKosong + ' pesanan dilewati: resi masih kosong. Atur pengiriman di Shopee, lalu ekspor lagi.</li>' : '',
       p.skipBatal ? '<li>' + p.skipBatal + ' pesanan dilewati: dibatalkan/dikembalikan</li>' : '',
       p.skipInstan ? '<li>' + p.skipInstan + ' pesanan dilewati: Instant/Same Day/Next Day/Ambil di Tempat (tidak perlu discan)</li>' : '',
@@ -654,16 +674,17 @@
     ];
     $('pvSummary').innerHTML = lines.join('');
     $('pvItems').innerHTML = n ? sortByDeadline(staged.items).slice(0, 200).map(itemRow).join('') : '';
-    $('pvSave').disabled = !n;
-    $('pvSave').textContent = n ? 'Simpan ' + n + ' resi ke Sheet' : 'Tidak ada yang baru';
+    $('pvSave').disabled = !n && !staged.lengkapi;
+    $('pvSave').textContent = n ? 'Simpan ' + n + ' resi ke Sheet' : staged.lengkapi ? 'Lengkapi data ' + staged.lengkapi + ' resi' : 'Tidak ada yang baru';
     $('preview').hidden = false;
   }
 
   function saveStaged() {
-    if (!staged || !staged.items.length) return;
+    if (!staged || (!staged.items.length && !staged.lengkapi)) return;
     var btn = $('pvSave');
     btn.disabled = true; btn.textContent = 'Menyimpan…';
-    api({ action: 'import', rows: staged.items }, 60000).then(function (r) {
+    // Kirim semua: yang sudah ada dilewati server, tapi penerima/produknya dilengkapi.
+    api({ action: 'import', rows: staged.all || staged.items }, 60000).then(function (r) {
       $('preview').hidden = true;
       impMsg('Tersimpan: ' + r.added + ' resi baru. ' + (r.sudahAda ? r.sudahAda + ' sudah ada sebelumnya (dilewati). ' : '') +
         'Total daftar sekarang ' + r.stats.total + '.', 'ok');
@@ -705,18 +726,87 @@
       '<span class="it-dl">' + (x.deadline != null ? esc(ddmmhhmm(x.deadline)) + ' · ' + esc(sisa(x.deadline)) : 'tanpa tenggat') + '</span></li>';
   }
 
+  /* Pencocokan: Belum masuk / Kelebihan / Dobel / Belum keluar, tiap resi bisa "Lihat" */
+  var cocok = null, grp = 'kurang';
+  var GRP = {
+    kurang: { key: 'items', hint: 'Ada di daftar Shopee, belum discan MASUK. Urut tenggat terdekat; merah = kurang dari 3 jam.',
+              empty: function (s) { return s.total ? 'Semua resi di daftar sudah scan masuk ✔' : 'Daftar masih kosong. Impor ekspor Shopee dulu.'; } },
+    lebih:  { key: 'lebih', hint: 'Sudah discan, tapi TIDAK ada di daftar Shopee. Kalau sudah impor terbaru: cek apakah pesanan ini batal atau paketnya salah.',
+              empty: function () { return 'Tidak ada kelebihan ✔'; } },
+    dobel:  { key: 'dobel', hint: 'Resi yang discan lebih dari sekali (scan keduanya ditolak, jadi tidak terhitung dua kali). Cek fisiknya: jangan sampai ada 2 paket untuk 1 pesanan.',
+              empty: function () { return 'Tidak ada scan dobel ✔'; } },
+    keluar: { key: 'belumKeluar', hint: 'Sudah scan MASUK, belum scan KELUAR (belum diserahkan ke kurir).',
+              empty: function (s) { return s.masuk ? 'Semua paket yang masuk sudah keluar ✔' : 'Belum ada yang discan masuk.'; } }
+  };
+
   function loadPending() {
     var ul = $('pending');
     if (!cfg.url) { ul.innerHTML = '<li class="empty">Sambungkan dulu di Pengaturan (ikon gigi).</li>'; return; }
-    $('pendCount').textContent = '…';
+    ['nKurang', 'nLebih', 'nDobel', 'nKeluar'].forEach(function (id) { $(id).textContent = '…'; });
     api({ action: 'pending' }, 30000).then(function (r) {
-      $('pendCount').textContent = r.items.length;
-      ul.innerHTML = r.items.length ? sortByDeadline(r.items).map(itemRow).join('')
-        : '<li class="empty">' + (r.stats.total ? 'Semua resi di Daftar sudah scan masuk ✔' : 'Daftar masih kosong. Impor dulu.') + '</li>';
+      cocok = { items: sortByDeadline(r.items || []), lebih: r.lebih || [], dobel: r.dobel || [], belumKeluar: r.belumKeluar || [], stats: r.stats || {} };
+      renderCocok();
     }, function (e) {
-      $('pendCount').textContent = '!';
+      ['nKurang', 'nLebih', 'nDobel', 'nKeluar'].forEach(function (id) { $(id).textContent = '!'; });
       ul.innerHTML = '<li class="empty err">' + esc(e.message) + '</li>';
     });
+  }
+
+  function renderCocok() {
+    if (!cocok) return;
+    var n = { kurang: cocok.items.length, lebih: cocok.lebih.length, dobel: cocok.dobel.length, keluar: cocok.belumKeluar.length };
+    $('nKurang').textContent = n.kurang; $('nLebih').textContent = n.lebih;
+    $('nDobel').textContent = n.dobel; $('nKeluar').textContent = n.keluar;
+    document.querySelectorAll('[data-grp]').forEach(function (b) {
+      var g = b.getAttribute('data-grp');
+      b.setAttribute('aria-selected', String(g === grp));
+      b.classList.toggle('bad', n[g] > 0 && g !== 'keluar');
+    });
+    var s = cocok.stats, st = $('cocokStatus');
+    if (!s.total) {
+      st.className = 'cocok-status';
+      st.innerHTML = 'Daftar belum diimpor' + (s.masuk ? '<small>' + s.masuk + ' paket sudah discan masuk. Impor ekspor Shopee untuk mencocokkan.</small>' : '');
+    } else if (!n.kurang && !n.lebih) {
+      st.className = 'cocok-status ok';
+      st.innerHTML = 'COCOK — ' + s.total + ' resi di daftar sudah scan masuk semua' +
+        (n.keluar ? '<small>' + n.keluar + ' paket belum scan KELUAR.</small>' : '<small>Semua sudah diserahkan ke kurir.</small>');
+    } else {
+      st.className = 'cocok-status';
+      st.innerHTML = 'BELUM COCOK' + '<small>' + [n.kurang ? n.kurang + ' belum discan masuk (kurang)' : '', n.lebih ? n.lebih + ' discan tapi tidak ada di daftar (lebih)' : '']
+        .filter(Boolean).join(' · ') + '</small>';
+    }
+    var g = GRP[grp], list = cocok[g.key];
+    $('grpHint').textContent = g.hint;
+    $('pending').innerHTML = list.length ? list.map(function (x) { return cocokRow(x, grp); }).join('')
+      : '<li class="empty">' + esc(g.empty(s)) + '</li>';
+  }
+
+  function jamTgl(ms) { return ms == null ? '' : ddmmhhmm(ms); }
+
+  function cocokRow(x, g) {
+    var urgent = g === 'kurang' && x.deadline != null && x.deadline - Date.now() < 3 * 3600000;
+    var kanan = g === 'kurang' ? (x.deadline != null ? ddmmhhmm(x.deadline) + ' · ' + sisa(x.deadline) : 'tanpa tenggat')
+      : g === 'dobel' ? x.n + '× ' + (x.aksi === 'KELUAR' ? 'keluar' : 'masuk')
+      : 'masuk ' + jamTgl(x.masuk);
+    var meta = [x.penerima, kurirOf(x.kurir, x.resi)].filter(Boolean).join(' · ') || (g === 'lebih' ? 'tidak ada di daftar' : x.no || '');
+    var rows = [
+      ['Resi', '<dd class="big">' + esc(x.resi) + '</dd>'],
+      ['Penerima', x.penerima ? '<dd>' + esc(x.penerima) + '</dd>' : ''],
+      ['Produk', x.produk ? '<dd>' + esc(x.produk).split(' | ').join('<br>') + '</dd>' : ''],
+      ['No. Pesanan', x.no ? '<dd>' + esc(x.no) + '</dd>' : ''],
+      ['Pengiriman', x.kurir ? '<dd>' + esc(x.kurir) + '</dd>' : ''],
+      ['Tenggat', x.deadline != null ? '<dd>' + esc(ddmmhhmm(x.deadline) + ' (' + sisa(x.deadline) + ')') + '</dd>' : ''],
+      ['Scan masuk', x.masuk != null ? '<dd>' + esc(jamTgl(x.masuk) + (x.perangkat ? ' · ' + x.perangkat : '')) + '</dd>' : ''],
+      ['Dobel', g === 'dobel' ? '<dd>' + esc(x.n + '× scan ' + x.aksi + ' ditolak, terakhir ' + jamTgl(x.terakhir) + (x.perangkat ? ' · ' + x.perangkat : '')) + '</dd>' : '']
+    ].filter(function (r) { return r[1]; }).map(function (r) { return '<dt>' + r[0] + '</dt>' + r[1]; }).join('');
+    var note = !x.penerima && !x.produk
+      ? '<dt></dt><dd class="mu">' + (g === 'lebih' ? 'Resi ini tidak ada di ekspor Shopee, jadi nama & produknya tidak diketahui. Cari di Seller Center → Pesanan (ketik resinya).'
+        : 'Nama & produk belum ada. Impor ulang ekspor Shopee untuk melengkapinya.') + '</dd>' : '';
+    return '<li><details class="ck"><summary><div class="it' + (urgent ? ' urgent' : '') + '">' +
+      '<span class="it-resi">' + esc(x.resi) + '</span>' +
+      '<span class="it-meta">' + esc(meta) + '</span>' +
+      '<span class="it-dl">' + esc(kanan) + '<br><span class="lihat">Lihat</span></span>' +
+      '</div></summary><dl>' + rows + note + '</dl></details></li>';
   }
 
   var resetArmed = null;
@@ -875,6 +965,9 @@
     $('pvSave').addEventListener('click', saveStaged);
     $('pvCancel').addEventListener('click', function () { staged = null; $('preview').hidden = true; impMsg(''); });
     $('pendRefresh').addEventListener('click', loadPending);
+    document.querySelectorAll('[data-grp]').forEach(function (b) {
+      b.addEventListener('click', function () { grp = b.getAttribute('data-grp'); renderCocok(); });
+    });
     $('scanRefresh').addEventListener('click', refreshNow);
     $('resetBtn').addEventListener('click', resetSession);
     $('openSheet').addEventListener('click', function (e) {

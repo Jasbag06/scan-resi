@@ -113,10 +113,17 @@
       <div class="col">
         <a id="openSheet" class="btn primary wide" target="_blank" rel="noopener">Buka Google Sheet</a>
         <div class="h2row">
-          <h2>Belum scan masuk <span id="pendCount" class="count">–</span></h2>
+          <h2>Pencocokan</h2>
           <button type="button" id="pendRefresh" class="btn small ghost">Muat ulang</button>
         </div>
-        <p class="mu">Urut tenggat terdekat. Merah = tenggat kurang dari 3 jam.</p>
+        <div id="cocokStatus" class="cocok-status"></div>
+        <div class="grp" role="tablist" aria-label="Kelompok pencocokan">
+          <button type="button" role="tab" data-grp="kurang">Belum masuk <b id="nKurang">–</b></button>
+          <button type="button" role="tab" data-grp="lebih">Kelebihan <b id="nLebih">–</b></button>
+          <button type="button" role="tab" data-grp="dobel">Dobel <b id="nDobel">–</b></button>
+          <button type="button" role="tab" data-grp="keluar">Belum keluar <b id="nKeluar">–</b></button>
+        </div>
+        <p id="grpHint" class="mu"></p>
         <ul id="pending" class="items"></ul>
 
         <h2 class="mt">Sesi</h2>
