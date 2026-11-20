@@ -165,7 +165,7 @@
     var kurir = item.type === 'scan' ? kurirOf(res.kurir, res.resi || item.resi) : '';
     if (item.type === 'scan') {
       if (!ACCEPTED[res.code]) removeUndo(item.id);
-      updateHist(item.id, { state: res.code, t: res.t, h: res.h, kurir: kurir });
+      updateHist(item.id, { state: res.code, t: res.t, h: res.h, kurir: kurir, resi: res.resi || item.resi });
     } else if (res.code === 'UNDONE') {
       updateHist(item.target, { state: 'UNDONE', t: 'warn', h: 'Dibatalkan' });
     }
@@ -310,11 +310,13 @@
   }
 
   // Kamera kadang salah baca 1 frame (mis. SPXCD0645955402-B untuk SPXID06459554023B).
-  // Kode baru diterima kalau terbaca SAMA 2x berturut-turut dalam 1,5 detik.
+  // Kode berbentuk resi/No. Pesanan yang lazim langsung diterima (cepat).
+  // Bentuk lain baru diterima kalau terbaca SAMA 2x dalam 3 detik.
+  var SURE_RE = /^(SPXID\d{11}[A-Z]|[A-Z]{2}\d{11}|JP\d{10}|\d{6}[0-9A-Z]{8})$/;
   var camCand = '', camCandAt = 0;
   function camDecoded(txt) {
     var now = Date.now();
-    if (txt === camCand && now - camCandAt < 1500) {
+    if (SURE_RE.test(String(txt).trim()) || (txt === camCand && now - camCandAt < 3000)) {
       camCand = ''; camCandAt = 0;
       submitCode(txt, 'kamera');
     } else {
@@ -339,7 +341,7 @@
     qr = qr || new Html5Qrcode('reader', qrConfig());
     qr.start({ facingMode: 'environment' }, {
       fps: 12,
-      aspectRatio: 1.777, // lebar & pendek: cocok untuk barcode resi, hemat tempat
+      aspectRatio: 1.333,
       qrbox: function (w, h) {
         var bw = Math.max(120, Math.floor(w * 0.92));
         return { width: bw, height: Math.max(80, Math.floor(Math.min(h * 0.65, bw * 0.55))) };

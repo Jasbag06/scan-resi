@@ -179,7 +179,7 @@ body[data-mode="out"] .mode-label { border-color: var(--out); color: var(--out);
 .raw { font-size: 13px; color: var(--mu); margin: 6px 2px 0; min-height: 20px; word-break: break-all; }
 
 .reader { margin: 0 0 10px; border-radius: 12px; overflow: hidden; background: #000; }
-.reader video { display: block; width: 100% !important; height: auto !important; max-height: 34vh; object-fit: cover; }
+.reader video { display: block; width: 100% !important; height: auto !important; }
 
 /* Kamera menyala: rapatkan bagian atas supaya kamera + kartu hasil muat satu layar */
 body.cam-on .per-kurir, body.cam-on .mode-row { display: none; }
