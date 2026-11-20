@@ -554,8 +554,17 @@
       user: findCol(cols, 'Username (Pembeli)', /username/i),
       produk: findCol(cols, 'Nama Produk', /^nama\s*produk/i),
       variasi: findCol(cols, 'Nama Variasi', /^nama\s*variasi/i),
-      jumlah: findCol(cols, 'Jumlah', /^jumlah$/i)
+      jumlah: findCol(cols, 'Jumlah', /^jumlah$/i),
+      kota: findCol(cols, 'Kota/Kabupaten', /^kota|kabupaten/i),
+      alamat: findCol(cols, 'Alamat Pengiriman', /alamat/i)
     };
+    // Kota saja (bukan alamat lengkap): kolom Kota/Kabupaten, atau bagian HURUF BESAR "KOTA …"/"KAB. …" di alamat.
+    function kotaOf(r) {
+      var k = val(r, 'kota');
+      if (k) return k;
+      var m = val(r, 'alamat').match(/\b(KOTA|KAB\.?|KABUPATEN)\s+[A-Z][A-Z .'-]*[A-Z]/);
+      return m ? m[0] : '';
+    }
     function val(r, k) { return c[k] ? String(r[c[k]] == null ? '' : r[c[k]]).trim() : ''; }
     function produkOf(r) {
       var p = val(r, 'produk'), v = val(r, 'variasi'), q = val(r, 'jumlah');
@@ -581,7 +590,7 @@
       }
       var pen = val(r, 'penerima'), user = val(r, 'user');
       var it = { resi: resi, no: no, kurir: kurir, deadline: c.tenggat ? parseDeadline(r[c.tenggat]) : null, src: 'ekspor',
-                 penerima: pen + (user && user !== pen ? ' (' + user + ')' : ''), produk: prod };
+                 penerima: pen + (user && user !== pen ? ' (' + user + ')' : ''), produk: prod, kota: kotaOf(r) };
       seen[resi] = it;
       items.push(it);
     });
@@ -664,7 +673,7 @@
       '<div class="pv-big"><b>' + n + '</b> resi baru akan ditambahkan</div>',
       '<ul class="pv-list">',
       r.sudahAda ? '<li>' + r.sudahAda + ' sudah ada di Daftar — dilewati (aman, tidak dobel)</li>' : '',
-      staged.lengkapi ? '<li>' + staged.lengkapi + ' resi lama akan dilengkapi nama penerima & produknya</li>' : '',
+      staged.lengkapi ? '<li>' + staged.lengkapi + ' resi lama akan dilengkapi nama penerima, produk & kotanya</li>' : '',
       p.skipKosong ? '<li>' + p.skipKosong + ' pesanan dilewati: resi masih kosong. Atur pengiriman di Shopee, lalu ekspor lagi.</li>' : '',
       p.skipBatal ? '<li>' + p.skipBatal + ' pesanan dilewati: dibatalkan/dikembalikan</li>' : '',
       p.skipInstan ? '<li>' + p.skipInstan + ' pesanan dilewati: Instant/Same Day/Next Day/Ambil di Tempat (tidak perlu discan)</li>' : '',
@@ -788,10 +797,11 @@
     var kanan = g === 'kurang' ? (x.deadline != null ? ddmmhhmm(x.deadline) + ' · ' + sisa(x.deadline) : 'tanpa tenggat')
       : g === 'dobel' ? x.n + '× ' + (x.aksi === 'KELUAR' ? 'keluar' : 'masuk')
       : 'masuk ' + jamTgl(x.masuk);
-    var meta = [x.penerima, kurirOf(x.kurir, x.resi)].filter(Boolean).join(' · ') || (g === 'lebih' ? 'tidak ada di daftar' : x.no || '');
+    var meta = [x.penerima, x.kota, kurirOf(x.kurir, x.resi)].filter(Boolean).join(' · ') || (g === 'lebih' ? 'tidak ada di daftar' : x.no || '');
     var rows = [
       ['Resi', '<dd class="big">' + esc(x.resi) + '</dd>'],
       ['Penerima', x.penerima ? '<dd>' + esc(x.penerima) + '</dd>' : ''],
+      ['Kota', x.kota ? '<dd>' + esc(x.kota) + '</dd>' : ''],
       ['Produk', x.produk ? '<dd>' + esc(x.produk).split(' | ').join('<br>') + '</dd>' : ''],
       ['No. Pesanan', x.no ? '<dd>' + esc(x.no) + '</dd>' : ''],
       ['Pengiriman', x.kurir ? '<dd>' + esc(x.kurir) + '</dd>' : ''],
